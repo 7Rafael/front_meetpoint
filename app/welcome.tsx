@@ -1,12 +1,20 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { MapPin } from 'lucide-react-native';
 import Button from '@/components/Button';
+import { useAuth } from '@/contexts/AuthContext';
 import Colors, { Fonts } from '@/constants/Colors';
 
 export default function WelcomeScreen() {
   const router = useRouter();
+  const { user, loading } = useAuth();
+
+  useEffect(() => {
+    if (!loading && user) {
+      router.replace('/(tabs)');
+    }
+  }, [user, loading]);
 
   const handleLogin = () => {
     router.push('/auth/login');
@@ -15,6 +23,10 @@ export default function WelcomeScreen() {
   const handleRegister = () => {
     router.push('/auth/register-type');
   };
+
+  if (loading) {
+    return null; // or a loading spinner
+  }
 
   return (
     <View style={styles.container}>

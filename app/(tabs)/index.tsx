@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -9,30 +9,77 @@ import {
   ScrollView,
   SafeAreaView,
   Platform,
-  Image
+  Image,
+  ActivityIndicator
 } from 'react-native';
 import { Search, Filter, TrendingUp, Users, Star, MessageSquare } from 'lucide-react-native';
 import EstablishmentCard from '@/components/EstablishmentCard';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { getColors, Fonts } from '@/constants/Colors';
-import { establishments, getCurrentUser, getBusinessEstablishment, getEstablishmentRatings } from '@/utils/mockData';
+import ApiService from '@/service/api';
 
 export default function HomeScreen() {
   const { isDark } = useTheme();
+  const { user } = useAuth();
   const colors = getColors(isDark);
-  const currentUser = getCurrentUser();
-  const isBusinessUser = currentUser.type === 'business';
+  const isBusinessUser = user?.type === 'estabelecimento';
   
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('Todos');
+  const [establishments, setEstablishments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [businessStats, setBusinessStats] = useState(null);
+  const [businessRatings, setBusinessRatings] = useState([]);
 
   const filters = ['Todos', 'Restaurante', 'Café', 'Bar', 'Padaria', 'Mercado'];
 
-  const filteredEstablishments = establishments.filter(establishment => {
-    const matchesSearch = establishment.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesFilter = activeFilter === 'Todos' || establishment.category === activeFilter;
-    return matchesSearch && matchesFilter;
-  });
+  useEffect(() => {
+    if (isBusinessUser) {
+      loadBusinessData();
+    } else {
+      loadEstablishments();
+    }
+  }, [isBusinessUser, user]);
+
+  useEffect(() => {
+    if (!isBusinessUser) {
+      loadEstablishments();
+    }
+  }, [searchQuery, activeFilter]);
+
+  const loadEstablishments = async () => {
+    try {
+      setLoading(true);
+      const categoria = activeFilter === 'Todos' ? undefined : activeFilter;
+      const busca = searchQuery.trim() || undefined;
+      
+      const data = await ApiService.getEstabelecimentos(categoria, busca);
+      setEstablishments(data);
+    } catch (error) {
+      console.error('Error loading establishments:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadBusinessData = async () => {
+    try {
+      setLoading(true);
+      if (user?.id) {
+        const [stats, ratings] = await Promise.all([
+          ApiService.getEstabelecimentoEstatisticas(user.id.toString()),
+          ApiService.getEstabelecimentoAvaliacoes(user.id.toString())
+        ]);
+        setBusinessStats(stats);
+        setBusinessRatings(ratings.slice(0, 3)); // Only show 3 recent ratings
+      }
+    } catch (error) {
+      console.error('Error loading business data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const styles = StyleSheet.create({
     safeArea: {
@@ -42,6 +89,11 @@ export default function HomeScreen() {
     },
     container: {
       flex: 1,
+    },
+    loadingContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
     },
     errorContainer: {
       flex: 1,
@@ -67,12 +119,6 @@ export default function HomeScreen() {
       shadowOpacity: 0.1,
       shadowRadius: 8,
       elevation: 3,
-    },
-    businessImage: {
-      width: '100%',
-      height: 120,
-      borderRadius: 12,
-      marginBottom: 16,
     },
     businessInfo: {
       alignItems: 'center',
@@ -249,47 +295,41 @@ export default function HomeScreen() {
     },
   });
 
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   if (isBusinessUser) {
-    const establishment = currentUser.businessId ? getBusinessEstablishment(currentUser.businessId) : null;
-    const ratings = establishment ? getEstablishmentRatings(establishment.id) : [];
-
-    if (!establishment) {
-      return (
-        <SafeAreaView style={styles.safeArea}>
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>Estabelecimento não encontrado</Text>
-          </View>
-        </SafeAreaView>
-      );
-    }
-
     return (
       <SafeAreaView style={styles.safeArea}>
         <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
           <View style={styles.businessContent}>
             <View style={styles.businessHeader}>
-              <Image
-                source={{ uri: establishment.imageUrl }}
-                style={styles.businessImage}
-                resizeMode="cover"
-              />
               <View style={styles.businessInfo}>
-                <Text style={styles.businessName}>{establishment.name}</Text>
-                <Text style={styles.businessCategory}>{establishment.category}</Text>
-                <Text style={styles.businessAddress}>{establishment.address}</Text>
+                <Text style={styles.businessName}>{user?.nome}</Text>
+                <Text style={styles.businessCategory}>{user?.categoria}</Text>
+                <Text style={styles.businessAddress}>{user?.endereco}</Text>
               </View>
             </View>
 
             <View style={styles.dashboardGrid}>
               <View style={styles.dashboardCard}>
                 <Star size={24} color={colors.primary} />
-                <Text style={styles.dashboardValue}>{establishment.averageRating.toFixed(1)}</Text>
+                <Text style={styles.dashboardValue}>
+                  {businessStats?.media_avaliacoes ? Number(businessStats.media_avaliacoes).toFixed(1) : '0.0'}
+                </Text>
                 <Text style={styles.dashboardLabel}>Avaliação Média</Text>
               </View>
               
               <View style={styles.dashboardCard}>
                 <MessageSquare size={24} color={colors.success} />
-                <Text style={styles.dashboardValue}>{establishment.numRatings}</Text>
+                <Text style={styles.dashboardValue}>{businessStats?.total_avaliacoes || 0}</Text>
                 <Text style={styles.dashboardLabel}>Avaliações</Text>
               </View>
               
@@ -308,24 +348,30 @@ export default function HomeScreen() {
 
             <View style={styles.recentSection}>
               <Text style={styles.sectionTitle}>Avaliações Recentes</Text>
-              {ratings.slice(0, 3).map((rating) => (
-                <View key={rating.id} style={styles.recentRatingCard}>
-                  <View style={styles.recentRatingHeader}>
-                    <View style={styles.ratingStars}>
-                      {[...Array(5)].map((_, i) => (
-                        <Star
-                          key={i}
-                          size={16}
-                          color={i < rating.rating ? colors.primary : colors.textSecondary}
-                          fill={i < rating.rating ? colors.primary : 'transparent'}
-                        />
-                      ))}
+              {businessRatings.length > 0 ? (
+                businessRatings.map((rating: any) => (
+                  <View key={rating.id} style={styles.recentRatingCard}>
+                    <View style={styles.recentRatingHeader}>
+                      <View style={styles.ratingStars}>
+                        {[...Array(5)].map((_, i) => (
+                          <Star
+                            key={i}
+                            size={16}
+                            color={i < rating.nota ? colors.primary : colors.textSecondary}
+                            fill={i < rating.nota ? colors.primary : 'transparent'}
+                          />
+                        ))}
+                      </View>
+                      <Text style={styles.recentRatingDate}>
+                        {new Date(rating.created_at).toLocaleDateString('pt-BR')}
+                      </Text>
                     </View>
-                    <Text style={styles.recentRatingDate}>{rating.date}</Text>
+                    <Text style={styles.recentRatingComment}>{rating.comentario}</Text>
                   </View>
-                  <Text style={styles.recentRatingComment}>{rating.comment}</Text>
-                </View>
-              ))}
+                ))
+              ) : (
+                <Text style={styles.emptySubtext}>Nenhuma avaliação ainda</Text>
+              )}
             </View>
           </View>
         </ScrollView>
@@ -375,10 +421,10 @@ export default function HomeScreen() {
           </ScrollView>
         </View>
 
-        {filteredEstablishments.length > 0 ? (
+        {establishments.length > 0 ? (
           <FlatList
-            data={filteredEstablishments}
-            keyExtractor={(item) => item.id}
+            data={establishments}
+            keyExtractor={(item) => item.id.toString()}
             renderItem={({ item }) => <EstablishmentCard establishment={item} />}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.listContainer}
@@ -387,7 +433,7 @@ export default function HomeScreen() {
           <View style={styles.emptyContainer}>
             <Filter size={60} color={colors.textSecondary} />
             <Text style={styles.emptyText}>
-              Nenhum estabelecimento encontrado para "{searchQuery}"
+              Nenhum estabelecimento encontrado
             </Text>
             <Text style={styles.emptySubtext}>
               Tente buscar com termos diferentes ou alterar o filtro

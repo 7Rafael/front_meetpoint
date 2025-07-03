@@ -5,10 +5,18 @@ import { MapPin } from 'lucide-react-native';
 import RatingStars from './RatingStars';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getColors, Fonts } from '@/constants/Colors';
-import { Establishment } from '../types';
 
 interface EstablishmentCardProps {
-  establishment: Establishment;
+  establishment: {
+    id: number;
+    nome: string;
+    endereco: string;
+    categoria: string;
+    descricao?: string;
+    imagem_url?: string;
+    media_avaliacoes: number;
+    total_avaliacoes: number;
+  };
 }
 
 const EstablishmentCard = ({ establishment }: EstablishmentCardProps) => {
@@ -88,23 +96,25 @@ const EstablishmentCard = ({ establishment }: EstablishmentCardProps) => {
       activeOpacity={0.9}
     >
       <Image
-        source={{ uri: establishment.imageUrl }}
+        source={{ 
+          uri: establishment.imagem_url || 'https://images.pexels.com/photos/1855214/pexels-photo-1855214.jpeg?auto=compress&cs=tinysrgb&w=800'
+        }}
         style={styles.image}
         resizeMode="cover"
       />
       <View style={styles.contentContainer}>
-        <Text style={styles.name}>{establishment.name}</Text>
+        <Text style={styles.name}>{establishment.nome}</Text>
         <View style={styles.categoryContainer}>
-          <Text style={styles.category}>{establishment.category}</Text>
+          <Text style={styles.category}>{establishment.categoria}</Text>
         </View>
         <View style={styles.locationContainer}>
           <MapPin size={14} color={colors.textSecondary} />
-          <Text style={styles.address}>{establishment.address}</Text>
+          <Text style={styles.address}>{establishment.endereco}</Text>
         </View>
         <View style={styles.ratingContainer}>
-          <RatingStars rating={establishment.averageRating} size={16} />
+          <RatingStars rating={establishment.media_avaliacoes} size={16} />
           <Text style={styles.ratingText}>
-            {establishment.averageRating.toFixed(1)} ({establishment.numRatings})
+            {Number(establishment.media_avaliacoes).toFixed(1)} ({establishment.total_avaliacoes})
           </Text>
         </View>
       </View>

@@ -12,16 +12,17 @@ import {
 import { useRouter } from 'expo-router';
 import { Eye, EyeOff, User, Store } from 'lucide-react-native';
 import Button from '@/components/Button';
+import { useAuth } from '@/contexts/AuthContext';
 import Colors, { Fonts } from '@/constants/Colors';
-import { authenticateUser } from '@/utils/mockData';
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { login } = useAuth();
   const [formData, setFormData] = useState({
     email: '',
     password: '',
   });
-  const [userType, setUserType] = useState<'customer' | 'business'>('customer');
+  const [userType, setUserType] = useState<'cliente' | 'estabelecimento'>('cliente');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -41,33 +42,23 @@ export default function LoginScreen() {
     return true;
   };
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!validateForm()) return;
 
     setLoading(true);
     
-    // Simulate API call
-    setTimeout(() => {
-      const user = authenticateUser(formData.email, formData.password);
-      
-      if (user && user.type === userType) {
-        setLoading(false);
-        router.replace('/(tabs)');
-      } else if (user && user.type !== userType) {
-        setLoading(false);
-        Alert.alert(
-          'Tipo de conta incorreto', 
-          `Esta conta é do tipo ${user.type === 'customer' ? 'Cliente' : 'Estabelecimento'}. Selecione o tipo correto.`
-        );
-      } else {
-        setLoading(false);
-        Alert.alert('Erro', 'Email ou senha incorretos');
-      }
-    }, 1500);
+    try {
+      await login(formData.email, formData.password, userType);
+      router.replace('/(tabs)');
+    } catch (error: any) {
+      Alert.alert('Erro', error.message || 'Credenciais inválidas');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const getPlaceholderEmails = () => {
-    if (userType === 'customer') {
+    if (userType === 'cliente') {
       return 'joao@example.com ou maria@example.com';
     } else {
       return 'carlos@cafesublime.com ou ana@restauranteoliveira.com';
@@ -89,14 +80,14 @@ export default function LoginScreen() {
               <TouchableOpacity
                 style={[
                   styles.userTypeButton,
-                  userType === 'customer' && styles.activeUserTypeButton
+                  userType === 'cliente' && styles.activeUserTypeButton
                 ]}
-                onPress={() => setUserType('customer')}
+                onPress={() => setUserType('cliente')}
               >
-                <User size={20} color={userType === 'customer' ? Colors.white : Colors.primary} />
+                <User size={20} color={userType === 'cliente' ? Colors.white : Colors.primary} />
                 <Text style={[
                   styles.userTypeButtonText,
-                  userType === 'customer' && styles.activeUserTypeButtonText
+                  userType === 'cliente' && styles.activeUserTypeButtonText
                 ]}>
                   Cliente
                 </Text>
@@ -105,14 +96,14 @@ export default function LoginScreen() {
               <TouchableOpacity
                 style={[
                   styles.userTypeButton,
-                  userType === 'business' && styles.activeUserTypeButton
+                  userType === 'estabelecimento' && styles.activeUserTypeButton
                 ]}
-                onPress={() => setUserType('business')}
+                onPress={() => setUserType('estabelecimento')}
               >
-                <Store size={20} color={userType === 'business' ? Colors.white : Colors.primary} />
+                <Store size={20} color={userType === 'estabelecimento' ? Colors.white : Colors.primary} />
                 <Text style={[
                   styles.userTypeButtonText,
-                  userType === 'business' && styles.activeUserTypeButtonText
+                  userType === 'estabelecimento' && styles.activeUserTypeButtonText
                 ]}>
                   Estabelecimento
                 </Text>

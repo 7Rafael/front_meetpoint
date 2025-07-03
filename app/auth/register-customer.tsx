@@ -12,15 +12,17 @@ import {
 import { useRouter } from 'expo-router';
 import { Eye, EyeOff } from 'lucide-react-native';
 import Button from '@/components/Button';
+import { useAuth } from '@/contexts/AuthContext';
 import Colors from '@/constants/Colors';
 
 export default function RegisterCustomerScreen() {
   const router = useRouter();
+  const { register } = useAuth();
   const [formData, setFormData] = useState({
-    name: '',
+    nome: '',
     email: '',
-    phone: '',
-    password: '',
+    telefone: '',
+    senha: '',
     confirmPassword: '',
   });
   const [showPassword, setShowPassword] = useState(false);
@@ -32,7 +34,7 @@ export default function RegisterCustomerScreen() {
   };
 
   const validateForm = () => {
-    if (!formData.name.trim()) {
+    if (!formData.nome.trim()) {
       Alert.alert('Erro', 'Por favor, informe seu nome completo');
       return false;
     }
@@ -40,32 +42,37 @@ export default function RegisterCustomerScreen() {
       Alert.alert('Erro', 'Por favor, informe um email válido');
       return false;
     }
-    if (!formData.phone.trim()) {
+    if (!formData.telefone.trim()) {
       Alert.alert('Erro', 'Por favor, informe seu telefone');
       return false;
     }
-    if (formData.password.length < 6) {
+    if (formData.senha.length < 6) {
       Alert.alert('Erro', 'A senha deve ter pelo menos 6 caracteres');
       return false;
     }
-    if (formData.password !== formData.confirmPassword) {
+    if (formData.senha !== formData.confirmPassword) {
       Alert.alert('Erro', 'As senhas não coincidem');
       return false;
     }
     return true;
   };
 
-  const handleRegister = () => {
+  const handleRegister = async () => {
     if (!validateForm()) return;
 
     setLoading(true);
     
-    // Simulate API call
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      await register({
+        nome: formData.nome,
+        email: formData.email,
+        telefone: formData.telefone,
+        senha: formData.senha,
+      }, 'cliente');
+      
       Alert.alert(
         'Cadastro realizado!',
-        'Sua conta foi criada com sucesso. Bem-vindo ao RateSpot!',
+        'Sua conta foi criada com sucesso. Bem-vindo ao MeetPoint!',
         [
           {
             text: 'OK',
@@ -73,7 +80,11 @@ export default function RegisterCustomerScreen() {
           },
         ]
       );
-    }, 2000);
+    } catch (error: any) {
+      Alert.alert('Erro', error.message || 'Erro ao criar conta');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -92,8 +103,8 @@ export default function RegisterCustomerScreen() {
                 style={styles.input}
                 placeholder="Digite seu nome completo"
                 placeholderTextColor={Colors.text.light}
-                value={formData.name}
-                onChangeText={(value) => handleInputChange('name', value)}
+                value={formData.nome}
+                onChangeText={(value) => handleInputChange('nome', value)}
                 autoCapitalize="words"
               />
             </View>
@@ -117,8 +128,8 @@ export default function RegisterCustomerScreen() {
                 style={styles.input}
                 placeholder="(11) 99999-9999"
                 placeholderTextColor={Colors.text.light}
-                value={formData.phone}
-                onChangeText={(value) => handleInputChange('phone', value)}
+                value={formData.telefone}
+                onChangeText={(value) => handleInputChange('telefone', value)}
                 keyboardType="phone-pad"
               />
             </View>
@@ -130,8 +141,8 @@ export default function RegisterCustomerScreen() {
                   style={styles.passwordInput}
                   placeholder="Digite sua senha"
                   placeholderTextColor={Colors.text.light}
-                  value={formData.password}
-                  onChangeText={(value) => handleInputChange('password', value)}
+                  value={formData.senha}
+                  onChangeText={(value) => handleInputChange('senha', value)}
                   secureTextEntry={!showPassword}
                 />
                 <Button

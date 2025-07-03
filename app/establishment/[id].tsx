@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -7,51 +7,79 @@ import {
   TextInput,
   ScrollView,
   TouchableOpacity,
-  Alert
+  Alert,
+  ActivityIndicator
 } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { MapPin, Clock } from 'lucide-react-native';
 import Button from '@/components/Button';
 import RatingStars from '@/components/RatingStars';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { getColors, Fonts } from '@/constants/Colors';
-import { getEstablishmentById, getEstablishmentRatings, getCurrentUser } from '@/utils/mockData';
+import ApiService from '@/service/api';
 
 export default function EstablishmentScreen() {
   const { isDark } = useTheme();
+  const { user } = useAuth();
   const colors = getColors(isDark);
   const { id } = useLocalSearchParams<{ id: string }>();
-  const establishment = getEstablishmentById(id);
-  const establishmentRatings = getEstablishmentRatings(id);
-  const currentUser = getCurrentUser();
-
+  
+  const [establishment, setEstablishment] = useState<any>(null);
+  const [ratings, setRatings] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  if (!establishment) {
-    return (
-      <View style={styles.notFoundContainer}>
-        <Text style={styles.notFoundText}>Estabelecimento não encontrado</Text>
-      </View>
-    );
-  }
+  useEffect(() => {
+    if (id) {
+      loadEstablishmentData();
+    }
+  }, [id]);
+
+  const loadEstablishmentData = async () => {
+    try {
+      setLoading(true);
+      const [establishmentData, ratingsData] = await Promise.all([
+        ApiService.getEstabelecimentoById(id!),
+        ApiService.getEstabelecimentoAvaliacoes(id!)
+      ]);
+      
+      setEstablishment(establishmentData);
+      setRatings(ratingsData);
+    } catch (error) {
+      console.error('Error loading establishment data:', error);
+      Alert.alert('Erro', 'Não foi possível carregar os dados do estabelecimento');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleRatingChange = (value: number) => {
     setRating(value);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (rating === 0) {
       Alert.alert('Avaliação incompleta', 'Por favor, selecione uma classificação de 1 a 5 estrelas.');
       return;
     }
 
+    if (!user) {
+      Alert.alert('Login necessário', 'Você precisa estar logado para avaliar um estabelecimento.');
+      return;
+    }
+
     setSubmitting(true);
 
-    // Simulate API call
-    setTimeout(() => {
-      setSubmitting(false);
+    try {
+      await ApiService.createAvaliacao({
+        estabelecimento_id: parseInt(id!),
+        nota: rating,
+        comentario: comment.trim() || undefined
+      });
+
       Alert.alert(
         'Avaliação enviada',
         'Obrigado por compartilhar sua opinião!',
@@ -61,17 +89,27 @@ export default function EstablishmentScreen() {
             onPress: () => {
               setRating(0);
               setComment('');
+              loadEstablishmentData(); // Reload to show new rating
             },
           },
         ]
       );
-    }, 1000);
+    } catch (error: any) {
+      Alert.alert('Erro', error.message || 'Não foi possível enviar a avaliação');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const styles = StyleSheet.create({
     container: {
       flex: 1,
       backgroundColor: colors.background.secondary,
+    },
+    loadingContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
     },
     notFoundContainer: {
       flex: 1,
@@ -252,89 +290,115 @@ export default function EstablishmentScreen() {
     },
   });
 
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  if (!establishment) {
+    return (
+      <View style={styles.notFoundContainer}>
+        <Text style={styles.notFoundText}>Estabelecimento não encontrado</Text>
+      </View>
+    );
+  }
+
   return (
     <ScrollView style={styles.container}>
       <Image
-        source={{ uri: establishment.imageUrl }}
+        source={{ 
+          uri: establishment.imagem_url || 'https://images.pexels.com/photos/1855214/pexels-photo-1855214.jpeg?auto=compress&cs=tinysrgb&w=800'
+        }}
         style={styles.image}
         resizeMode="cover"
       />
 
       <View style={styles.contentContainer}>
         <View style={styles.headerContainer}>
-          <Text style={styles.name}>{establishment.name}</Text>
+          <Text style={styles.name}>{establishment.nome}</Text>
           <View style={styles.categoryContainer}>
-            <Text style={styles.category}>{establishment.category}</Text>
+            <Text style={styles.category}>{establishment.categoria}</Text>
           </View>
         </View>
 
         <View style={styles.infoContainer}>
           <View style={styles.infoItem}>
             <MapPin size={16} color={colors.text.secondary} />
-            <Text style={styles.infoText}>{establishment.address}</Text>
+            <Text style={styles.infoText}>{establishment.endereco}</Text>
           </View>
           <View style={styles.infoItem}>
             <Clock size={16} color={colors.text.secondary} />
-            <Text style={styles.infoText}>Aberto - Fecha às 22:00</Text>
+            <Text style={styles.infoText}>
+              {establishment.horario_funcionamento || 'Horário não informado'}
+            </Text>
           </View>
         </View>
 
         <View style={styles.ratingOverviewContainer}>
           <View style={styles.ratingNumberContainer}>
-            <Text style={styles.ratingNumber}>{establishment.averageRating.toFixed(1)}</Text>
+            <Text style={styles.ratingNumber}>
+              {Number(establishment.media_avaliacoes || 0).toFixed(1)}
+            </Text>
             <Text style={styles.ratingTotal}>/ 5</Text>
           </View>
           <View style={styles.ratingStarsContainer}>
-            <RatingStars rating={establishment.averageRating} size={20} />
+            <RatingStars rating={establishment.media_avaliacoes || 0} size={20} />
             <Text style={styles.numRatings}>
-              {establishment.numRatings} {establishment.numRatings === 1 ? 'avaliação' : 'avaliações'}
+              {establishment.total_avaliacoes} {establishment.total_avaliacoes === 1 ? 'avaliação' : 'avaliações'}
             </Text>
           </View>
         </View>
 
-        <View style={styles.ratingFormContainer}>
-          <Text style={styles.sectionTitle}>Avaliar Estabelecimento</Text>
-          <Text style={styles.ratingLabel}>Sua classificação</Text>
-          <RatingStars
-            rating={rating}
-            size={32}
-            interactive={true}
-            onRatingChange={handleRatingChange}
-            style={styles.ratingStars}
-          />
-          <Text style={styles.commentLabel}>Seu comentário (opcional)</Text>
-          <TextInput
-            style={styles.commentInput}
-            placeholder="Compartilhe sua experiência..."
-            placeholderTextColor={colors.text.secondary}
-            multiline
-            numberOfLines={4}
-            textAlignVertical="top"
-            value={comment}
-            onChangeText={setComment}
-          />
-          <Button
-            title="Enviar Avaliação"
-            onPress={handleSubmit}
-            loading={submitting}
-            disabled={rating === 0}
-            style={styles.submitButton}
-          />
-        </View>
+        {user?.type === 'cliente' && (
+          <View style={styles.ratingFormContainer}>
+            <Text style={styles.sectionTitle}>Avaliar Estabelecimento</Text>
+            <Text style={styles.ratingLabel}>Sua classificação</Text>
+            <RatingStars
+              rating={rating}
+              size={32}
+              interactive={true}
+              onRatingChange={handleRatingChange}
+              style={styles.ratingStars}
+            />
+            <Text style={styles.commentLabel}>Seu comentário (opcional)</Text>
+            <TextInput
+              style={styles.commentInput}
+              placeholder="Compartilhe sua experiência..."
+              placeholderTextColor={colors.text.secondary}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+              value={comment}
+              onChangeText={setComment}
+            />
+            <Button
+              title="Enviar Avaliação"
+              onPress={handleSubmit}
+              loading={submitting}
+              disabled={rating === 0}
+              style={styles.submitButton}
+            />
+          </View>
+        )}
 
-        {establishmentRatings.length > 0 && (
+        {ratings.length > 0 && (
           <View style={styles.reviewsContainer}>
             <Text style={styles.sectionTitle}>Avaliações Recentes</Text>
-            {establishmentRatings.map((review) => (
+            {ratings.map((review) => (
               <View key={review.id} style={styles.reviewCard}>
                 <View style={styles.reviewHeader}>
                   <Text style={styles.reviewUser}>
-                    {review.userId === currentUser.id ? 'Você' : 'Usuário'}
+                    {review.cliente_nome || 'Usuário'}
                   </Text>
-                  <Text style={styles.reviewDate}>{review.date}</Text>
+                  <Text style={styles.reviewDate}>
+                    {new Date(review.created_at).toLocaleDateString('pt-BR')}
+                  </Text>
                 </View>
-                <RatingStars rating={review.rating} size={16} style={styles.reviewRating} />
-                <Text style={styles.reviewComment}>{review.comment}</Text>
+                <RatingStars rating={review.nota} size={16} style={styles.reviewRating} />
+                <Text style={styles.reviewComment}>{review.comentario}</Text>
               </View>
             ))}
           </View>
